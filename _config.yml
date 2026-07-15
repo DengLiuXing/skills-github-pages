@@ -1,0 +1,5 @@
+theme: minima
+theme: minima
+title: {{ login }} 的个人博客
+description: 在这里记录我的学习、项目与生活
+author: {{ login }}
