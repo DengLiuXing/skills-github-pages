@@ -43,9 +43,3 @@ title: Welcome to my blog!
 - 夜幕降临，颠沛笑谈里。
 
  _列车仍然前行。_ 
-
-<div align="center">
-
-[![GitHub](icons/outline/brand-github.svg) GitHub](https://github.com/DengLiuXing/skills-github-pages)
-
-</div>
