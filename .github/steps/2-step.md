@@ -1,6 +1,6 @@
 ## 步骤 2: 自定义你的主页
 
-干得不错！你已经成功启用了 GitHub Pages 🎉
+干得不错！你已经成功启用了 GitHub Pages ![confetti](../../icons/outline/confetti.svg)
 
 你可以在仓库设置中 [Pages](https://github.com/{{full_repo_name}}/settings/pages) 区域顶部看到你网站的访问链接（如果没有显示，刷新一下页面即可）。
 
@@ -10,11 +10,11 @@
 >
 > 在后续操作中，你的每一次修改都会实时更新到网站上。
 
-### 📖 理论: 如何定制主页
+### ![book](../../icons/outline/book.svg) 理论: 如何定制主页
 
 `index.md` 是网站的入口文件，只要你修改并提交这个文件到 `main` 分支，GitHub Pages 就会自动重新构建网站，并更新首页内容。
 
-### ⌨️ 实操环节: 创建你的主页
+### ![keyboard](../../icons/outline/keyboard.svg) 实操环节: 创建你的主页
 
 1. 进入仓库中的 `index.md` 文件（确保在 `main` 分支下）。
 2. 在右上角，打开文件编辑器。
@@ -24,7 +24,7 @@
 6. 提交成功后，Mona 会自动为你准备下一步练习内容。
 
 <details>
-<summary>遇到问题了? 🤷</summary><br/>
+<summary>遇到问题了? ![help-circle](../../icons/outline/help-circle.svg)</summary><br/>
 
 - 请确认你修改的是 `main` 分支中的 `index.md` 文件。
 

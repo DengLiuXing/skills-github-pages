@@ -1,8 +1,8 @@
 ## 步骤 4: 发布第一篇博客文章
 
-你的首页现在看起来不错！ 🤠
+你的首页现在看起来不错！
 
-### 📖 理论: Jekyll 博客文章与 Front Matter
+### ![book](../../icons/outline/book.svg) 理论: Jekyll 博客文章与 Front Matter
 
 在 Jekyll 中，文章需要遵循特定的文件命名规则，系统才能正确识别并生成文章页面。文件必须以 `_posts/YYYY-MM-DD-title.md` 命名，并且必须在 **front matter** 中包含 `title` 和 `date` 字段。
 
@@ -22,7 +22,7 @@ date: 2025-05-15
 > 更多内容可参考 [Jekyll frontmatter 文档](https://jekyllrb.com/docs/front-matter/).
 
 
-### ⌨️ 实操环节: 创建博客文章
+### ![keyboard](../../icons/outline/keyboard.svg) 实操环节: 创建博客文章
 
 1. 切换到仓库的 `main` 分支。
 1. 点击 `Add file（添加文件）` 下拉菜单，然后选择 `Create new file（创建新文件）`。
@@ -47,7 +47,7 @@ date: 2025-05-15
 1. 提交完成后，Mona 会自动为你准备下一步练习。
 
 <details>
-<summary>遇到问题? 🤷</summary><br/>
+<summary>遇到问题? ![help-circle](../../icons/outline/help-circle.svg)</summary><br/>
 
 - Double-check your file name and date format.
 - Make sure your frontmatter is at the very top of the file and formatted correctly.
