@@ -66,6 +66,16 @@
     font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
   }
   .hint{font-size:12px; color:var(--muted); margin-top:10px; line-height:1.6}
+
+  /* —— 标签 —— */
+  #tagArea{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;min-height:32px}
+  .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:13px;background:#1e2532;color:var(--accent2);border:1px solid #2d3648}
+  .tag .rm{cursor:pointer;color:var(--muted);font-size:16px;line-height:1;transition:color.1s}
+  .tag .rm:hover{color:#e86c6c}
+  .tag-row{display:flex;gap:8px;margin-bottom:2px}
+  .tag-row input{flex:1;min-width:80px}
+  button.sm{padding:8px 14px;font-size:13px;min-width:auto;white-space:nowrap;flex:0 0 auto}
+  .tag-status{font-size:12px;color:var(--muted);margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -78,6 +88,15 @@
 
     <label for="body" style="margin-top:16px">正文（Markdown）</label>
     <textarea id="body" placeholder="在这里写正文内容……支持 Markdown 语法。" spellcheck="false"></textarea>
+
+    <label style="margin-top:16px">标签</label>
+    <div id="tagArea"></div>
+    <div class="tag-row">
+      <input id="tagInput" type="text" placeholder="输入新标签" autocomplete="off">
+      <button id="addTagBtn" class="sm">添加</button>
+      <button id="scanTagsBtn" class="sm ghost">从 _posts 读取…</button>
+    </div>
+    <div class="tag-status" id="tagStatus"></div>
 
     <div class="meta">
       <div class="pill">
@@ -107,37 +126,76 @@
   </div>
 
 <script>
-  // —— 本地时区的今天（YYYY-MM-DD）——
+  // —— 辅助函数 ——
   function todayStr(){
     const d = new Date();
     const p = n => String(n).padStart(2,'0');
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
   }
-
-  // —— 生成文件名用的 slug（保留中文/字母/数字/连字符）——
   function slugify(s){
-    return s.trim()
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^\p{L}\p{N}-]+/gu, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'untitled';
+    return s.trim().toLowerCase().replace(/\s+/g,'-')
+      .replace(/[^\p{L}\p{N}-]+/gu,'').replace(/-+/g,'-').replace(/^-|-$/g,'') || 'untitled';
   }
 
+  // —— 标签管理 ——
+  let tags = ['日记'];                     // 当前标签数组
+  function renderTags(){
+    const area = document.getElementById('tagArea');
+    area.innerHTML = tags.map(t =>
+      `<span class="tag">${escHtml(t)}<span class="rm" data-tag="${escHtml(t)}">&times;</span></span>`
+    ).join('');
+    // 点击 × 删除
+    area.querySelectorAll('.rm').forEach(el => {
+      el.addEventListener('click', () => { removeTag(el.dataset.tag); });
+    });
+    refresh();
+  }
+  function addTag(t){
+    t = t.trim(); if(!t || tags.includes(t)) return;
+    tags.push(t); renderTags();
+  }
+  function removeTag(t){
+    tags = tags.filter(x => x !== t);
+    renderTags();
+  }
+  function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function tagsYaml(){ return '[' + tags.map(t => t.includes(' ') ? `"${t}"` : t).join(', ') + ']'; }
+
+  // —— 解析 front matter 中的 tags ——
+  function extractTagsFromMd(text){
+    const m = text.match(/^---\s*\n([\s\S]*?)\n---/);
+    if(!m) return [];
+    const fm = m[1];
+    // 匹配 tags: [a, b, c] 或 tags: [a, b, c] # 或 tags: a
+    const re = /^tags:\s*\[([^\]]*)\]/m;
+    const match = fm.match(re);
+    if(match){
+      return match[1].split(',').map(x => x.trim().replace(/^["']|["']$/g,'')).filter(Boolean);
+    }
+    // 单行 tags: 日记
+    const single = fm.match(/^tags:\s*(.+)$/m);
+    if(single) return [single[1].trim().replace(/^["']|["']$/g,'')];
+    return [];
+  }
+
+  // —— DOM 引用 ——
   const titleEl = document.getElementById('title');
   const bodyEl = document.getElementById('body');
   const dateOut = document.getElementById('dateOut');
   const fileOut = document.getElementById('fileOut');
   const preview = document.getElementById('preview');
+  const tagInput = document.getElementById('tagInput');
+  const tagStatus = document.getElementById('tagStatus');
 
   const DATE = todayStr();
   dateOut.textContent = DATE;
 
-  // —— 生成文件内容：front matter + 正文 ——
+  // —— 生成文件内容 ——
   function buildContent(title, body){
     const front = `---
 title: "${title.replace(/"/g, '\\"')}"
 date: ${DATE}
+tags: ${tagsYaml()}
 ---
 `;
     const content = body ? body.replace(/\r\n/g, '\n') : '';
@@ -147,13 +205,51 @@ date: ${DATE}
   function refresh(){
     const title = titleEl.value.trim() || 'untitled';
     const body = bodyEl.value;
-    const filename = `${DATE}-${slugify(titleEl.value)}.md`;
-    fileOut.textContent = filename;
+    fileOut.textContent = `${DATE}-${slugify(titleEl.value)}.md`;
     preview.textContent = buildContent(title, body);
   }
 
+  // —— 事件绑定 ——
   titleEl.addEventListener('input', refresh);
   bodyEl.addEventListener('input', refresh);
+
+  document.getElementById('addTagBtn').addEventListener('click', () => {
+    addTag(tagInput.value); tagInput.value = ''; tagInput.focus();
+  });
+  tagInput.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ addTag(tagInput.value); tagInput.value = ''; }
+  });
+
+  // —— 从 _posts 读取已有标签 ——
+  document.getElementById('scanTagsBtn').addEventListener('click', async () => {
+    tagStatus.textContent = '读取中……';
+    const tagInput = document.getElementById('tagInput');
+    let dir;
+    // 尝试用 File System Access API
+    if('showDirectoryPicker' in window){
+      try { dir = await window.showDirectoryPicker(); }
+      catch(e){ tagStatus.textContent = ''; if(e.name !== 'AbortError') tagStatus.textContent = '操作已取消'; return; }
+    } else {
+      tagStatus.textContent = '当前浏览器不支持直接读取文件夹。请在 File System Access API 支持的浏览器中打开（Chrome / Edge）。';
+      return;
+    }
+    const found = new Set();
+    for await (const entry of dir.values()){
+      if(entry.kind === 'file' && entry.name.endsWith('.md')){
+        try {
+          const file = await entry.getFile();
+          const text = await file.text();
+          const fileTags = extractTagsFromMd(text);
+          fileTags.forEach(t => found.add(t));
+        } catch(_){}
+      }
+    }
+    found.forEach(t => { if(!tags.includes(t)) addTag(t); });
+    tagStatus.textContent = found.size ? `已从 _posts 读取 ${found.size} 个标签` : '未找到标签';
+    setTimeout(() => { tagStatus.textContent = ''; }, 3000);
+  });
+
+  renderTags();
   refresh();
 
   // —— 下载 ——
@@ -164,30 +260,25 @@ date: ${DATE}
     const blob = new Blob([buildContent(title, body)], {type:'text/markdown;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   });
 
-  // —— 直接写入 _posts 目录（File System Access API）——
+  // —— 直接写入 _posts（File System Access API）——
   document.getElementById('saveDir').addEventListener('click', async () => {
     if(!('showDirectoryPicker' in window)){
-      alert('当前浏览器不支持直接写入文件夹。请改用「下载 .md 文件」，再手动移入 _posts/。');
-      return;
+      alert('当前浏览器不支持直接写入文件夹。请改用「下载 .md 文件」。'); return;
     }
     try{
       const dir = await window.showDirectoryPicker();
       const title = titleEl.value.trim() || 'untitled';
       const body = bodyEl.value;
       const filename = `${DATE}-${slugify(title)}.md`;
-      const fileHandle = await dir.getFileHandle(filename, {create:true});
-      const w = await fileHandle.createWritable();
-      await w.write(buildContent(title, body));
-      await w.close();
+      const fh = await dir.getFileHandle(filename, {create:true});
+      const w = await fh.createWritable();
+      await w.write(buildContent(title, body)); await w.close();
       alert(`已写入：${filename}`);
-    }catch(err){
-      if(err.name !== 'AbortError') alert('写入失败：' + err.message);
-    }
+    }catch(e){ if(e.name !== 'AbortError') alert('写入失败：' + e.message); }
   });
 </script>
 </body>

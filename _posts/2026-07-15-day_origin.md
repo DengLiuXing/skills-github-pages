@@ -1,6 +1,7 @@
 ---
 title: "day_origin"
 date: 2026-07-15
+tags: [日记]
 ---
 
 ## ![flag](/icons/outline/flag.svg) 一切的开始
