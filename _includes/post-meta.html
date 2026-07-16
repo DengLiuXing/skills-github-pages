@@ -1,0 +1,19 @@
+<div class="post-meta" style="margin-bottom:1.2em">
+  <time datetime="{{ page.date | date_to_xmlschema }}" itemprop="datePublished"
+        style="color:#8b93a7;font-size:.88em">
+    {{ page.date | date: "%Y-%m-%d" }}
+  </time>
+
+  {% if page.categories.size > 0 %}
+  <span style="margin-left:.6em">
+    {% for cat in page.categories %}
+    <a href="{{ '/categories/#' | append: cat | slugify | relative_url }}"
+       style="display:inline-block;padding:1px 10px;margin:2px 3px;border-radius:10px;
+              font-size:.8em;background:#1e2532;color:var(--accent2,#7ee0c0);
+              text-decoration:none;border:1px solid #2d3648">
+      {{ cat }}
+    </a>
+    {% endfor %}
+  </span>
+  {% endif %}
+</div>
