@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新建博客文章 · 生成器</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e6e9ef;
+    --muted:#8b93a7; --accent:#6ea8fe; --accent2:#7ee0c0; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
+    "PingFang SC","Microsoft YaHei",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 70% -10%,#1b2030 0%,var(--bg) 55%);
+    color:var(--text); display:flex; align-items:center; justify-content:center; padding:32px 16px;
+  }
+  .card{
+    width:100%; max-width:680px; background:var(--card);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:28px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  h1{font-size:20px; margin:0 0 4px}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 22px}
+  label{display:block; font-size:13px; color:var(--muted); margin:0 0 8px}
+  input[type=text]{
+    width:100%; padding:12px 14px; font-size:15px; color:var(--text);
+    background:#0f1218; border:1px solid var(--line); border-radius:10px; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input[type=text]:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(110,168,254,.18)}
+  textarea{
+    display:block; width:100%; min-height:180px; resize:vertical; padding:12px 14px;
+    font-size:14px; line-height:1.6; color:var(--text); background:#0f1218;
+    border:1px solid var(--line); border-radius:10px; outline:none;
+    font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(110,168,254,.18)}
+  .meta{
+    display:flex; gap:12px; margin-top:18px; flex-wrap:wrap;
+  }
+  .pill{
+    flex:1; min-width:160px; background:#0f1218; border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px;
+  }
+  .pill .k{font-size:11px; color:var(--muted); letter-spacing:.04em}
+  .pill .v{font-size:14px; margin-top:3px; word-break:break-all}
+  .pill .v.accent{color:var(--accent2)}
+  .actions{display:flex; gap:12px; margin-top:22px; flex-wrap:wrap}
+  button{
+    flex:1; min-width:160px; cursor:pointer; border:none; border-radius:10px;
+    padding:12px 14px; font-size:14px; font-weight:600; color:#0b0e13;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    transition:transform .08s, filter .15s;
+  }
+  button.ghost{background:transparent; color:var(--text); border:1px solid var(--line); font-weight:500}
+  button:hover{filter:brightness(1.06)}
+  button:active{transform:translateY(1px)}
+  details{margin-top:22px; border-top:1px solid var(--line); padding-top:16px}
+  summary{cursor:pointer; color:var(--muted); font-size:13px}
+  pre{
+    margin-top:12px; background:#0f1218; border:1px solid var(--line); border-radius:10px;
+    padding:14px; font-size:12.5px; line-height:1.55; color:#cdd3e0; overflow:auto; max-height:320px;
+    font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  .hint{font-size:12px; color:var(--muted); margin-top:10px; line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>新建博客文章</h1>
+    <p class="sub">填写标题和正文，日期自动生成，一键生成 .md 文件。</p>
+
+    <label for="title">文章标题</label>
+    <input id="title" type="text" placeholder="例如：我的第一篇随笔" autocomplete="off" autofocus>
+
+    <label for="body" style="margin-top:16px">正文（Markdown）</label>
+    <textarea id="body" placeholder="在这里写正文内容……支持 Markdown 语法。" spellcheck="false"></textarea>
+
+    <div class="meta">
+      <div class="pill">
+        <div class="k">DATE（自动）</div>
+        <div class="v accent" id="dateOut">—</div>
+      </div>
+      <div class="pill">
+        <div class="k">FILENAME（自动）</div>
+        <div class="v" id="fileOut">—</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="download">下载 .md 文件</button>
+      <button id="saveDir" class="ghost">保存到 _posts 文件夹…</button>
+    </div>
+
+    <details>
+      <summary>预览生成内容</summary>
+      <pre id="preview"></pre>
+    </details>
+
+    <p class="hint">
+      输入标题和正文后，点击 <b>下载 .md 文件</b> 保存到本地；<br>
+      <b>保存到 _posts 文件夹…</b> 可直接写入目录（需 Chrome / Edge）。
+    </p>
+  </div>
+
+<script>
+  // —— 本地时区的今天（YYYY-MM-DD）——
+  function todayStr(){
+    const d = new Date();
+    const p = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  }
+
+  // —— 生成文件名用的 slug（保留中文/字母/数字/连字符）——
+  function slugify(s){
+    return s.trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^\p{L}\p{N}-]+/gu, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'untitled';
+  }
+
+  const titleEl = document.getElementById('title');
+  const bodyEl = document.getElementById('body');
+  const dateOut = document.getElementById('dateOut');
+  const fileOut = document.getElementById('fileOut');
+  const preview = document.getElementById('preview');
+
+  const DATE = todayStr();
+  dateOut.textContent = DATE;
+
+  // —— 生成文件内容：front matter + 正文 ——
+  function buildContent(title, body){
+    const front = `---
+title: "${title.replace(/"/g, '\\"')}"
+date: ${DATE}
+---
+`;
+    const content = body ? body.replace(/\r\n/g, '\n') : '';
+    return front + (content ? '\n' + content + '\n' : '');
+  }
+
+  function refresh(){
+    const title = titleEl.value.trim() || 'untitled';
+    const body = bodyEl.value;
+    const filename = `${DATE}-${slugify(titleEl.value)}.md`;
+    fileOut.textContent = filename;
+    preview.textContent = buildContent(title, body);
+  }
+
+  titleEl.addEventListener('input', refresh);
+  bodyEl.addEventListener('input', refresh);
+  refresh();
+
+  // —— 下载 ——
+  document.getElementById('download').addEventListener('click', () => {
+    const title = titleEl.value.trim() || 'untitled';
+    const body = bodyEl.value;
+    const filename = `${DATE}-${slugify(title)}.md`;
+    const blob = new Blob([buildContent(title, body)], {type:'text/markdown;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // —— 直接写入 _posts 目录（File System Access API）——
+  document.getElementById('saveDir').addEventListener('click', async () => {
+    if(!('showDirectoryPicker' in window)){
+      alert('当前浏览器不支持直接写入文件夹。请改用「下载 .md 文件」，再手动移入 _posts/。');
+      return;
+    }
+    try{
+      const dir = await window.showDirectoryPicker();
+      const title = titleEl.value.trim() || 'untitled';
+      const body = bodyEl.value;
+      const filename = `${DATE}-${slugify(title)}.md`;
+      const fileHandle = await dir.getFileHandle(filename, {create:true});
+      const w = await fileHandle.createWritable();
+      await w.write(buildContent(title, body));
+      await w.close();
+      alert(`已写入：${filename}`);
+    }catch(err){
+      if(err.name !== 'AbortError') alert('写入失败：' + err.message);
+    }
+  });
+</script>
+</body>
+</html>
