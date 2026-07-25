@@ -96,6 +96,10 @@
       <button id="addCatBtn" class="sm">添加</button>
       <button id="scanCatsBtn" class="sm ghost">从 _posts 读取…</button>
     </div>
+    <div class="cat-row" style="margin-top:8px">
+      <button id="loadCatsBtn" class="sm ghost">读取分类文件…</button>
+      <button id="saveCatsBtn" class="sm ghost">保存分类到文件…</button>
+    </div>
     <div class="cat-status" id="catStatus"></div>
 
     <div class="meta">
@@ -121,7 +125,9 @@
 
     <p class="hint">
       输入标题和正文后，点击 <b>下载 .md 文件</b> 保存到本地；<br>
-      <b>保存到 _posts 文件夹…</b> 可直接写入目录（需 Chrome / Edge）。
+      <b>保存到 _posts 文件夹…</b> 可直接写入目录（需 Chrome / Edge）。<br>
+      分类列表来自项目根目录的 <b>categories.json</b>：通过 http 打开时自动加载；
+      点 <b>读取分类文件…</b> 可手动从项目目录加载，<b>保存分类到文件…</b> 可把当前分类写回。
     </p>
   </div>
 
@@ -139,6 +145,73 @@
 
   // —— 分类管理 ——
   let categories = ['日记'];                // 当前分类数组
+
+  // —— 分类文件自动持久化（首次弹窗选目录，之后缓存句柄静默写回）——
+  const FS_OK = 'showDirectoryPicker' in window && 'indexedDB' in window;
+  let catsDirHandle = null;                 // 缓存的项目目录句柄
+
+  function idbOpen(){
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('new-post-cats', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('meta');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  function idbGet(db, store, key){
+    return new Promise((res, rej) => {
+      const rq = db.transaction(store, 'readonly').objectStore(store).get(key);
+      rq.onsuccess = () => res(rq.result ? rq.result.value : null);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  function idbSet(db, store, obj){
+    return new Promise((res, rej) => {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).put(obj, obj.key);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+  async function idbSaveHandle(h){
+    const db = await idbOpen();
+    await idbSet(db, 'meta', {key:'catsDir', value:h});
+  }
+
+  // 取得可写的目录句柄：优先用缓存，否则弹窗选择并缓存
+  async function ensureCatsDirHandle(){
+    if(catsDirHandle){
+      let perm = 'prompt';
+      try{ perm = await catsDirHandle.queryPermission({mode:'readwrite'}); }catch(_){}
+      if(perm !== 'granted'){
+        try{ perm = await catsDirHandle.requestPermission({mode:'readwrite'}); }catch(_){}
+      }
+      if(perm === 'granted') return catsDirHandle;
+      catsDirHandle = null;                 // 权限被收回，下次重新选择
+    }
+    const h = await window.showDirectoryPicker({mode:'readwrite'});
+    catsDirHandle = h;
+    idbSaveHandle(h).catch(() => {});
+    return h;
+  }
+
+  // 自动把当前分类写回 categories.json
+  async function autoSaveCats(){
+    if(!FS_OK) return;
+    try{
+      const dir = await ensureCatsDirHandle();
+      const fh = await dir.getFileHandle('categories.json', {create:true});
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify({categories}, null, 2) + '\n');
+      await w.close();
+      catStatus.textContent = `已自动保存 ${categories.length} 个分类到 categories.json`;
+    }catch(e){
+      if(e.name === 'AbortError') return;   // 用户取消目录选择
+      catStatus.textContent = '自动保存失败（已保留在内存）';
+    }
+    setTimeout(() => { catStatus.textContent = ''; }, 2500);
+  }
+
   function renderCats(){
     const area = document.getElementById('catArea');
     area.innerHTML = categories.map(t =>
@@ -151,11 +224,11 @@
   }
   function addCat(t){
     t = t.trim(); if(!t || categories.includes(t)) return;
-    categories.push(t); renderCats();
+    categories.push(t); renderCats(); autoSaveCats();
   }
   function removeCat(t){
     categories = categories.filter(x => x !== t);
-    renderCats();
+    renderCats(); autoSaveCats();
   }
   function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function catsYaml(){ return '[' + categories.map(t => t.includes(' ') ? `"${t}"` : t).join(', ') + ']'; }
@@ -246,8 +319,79 @@ categories: ${catsYaml()}
     setTimeout(() => { catStatus.textContent = ''; }, 3000);
   });
 
+  // —— 读取 categories.json（从已选择的目录）——
+  async function loadCatsFromFile(dir){
+    try{
+      const fh = await dir.getFileHandle('categories.json');
+      const text = await (await fh.getFile()).text();
+      const obj = JSON.parse(text);
+      const arr = Array.isArray(obj.categories) ? obj.categories
+                : Array.isArray(obj) ? obj : [];
+      const added = arr.filter(Boolean).filter(t => !categories.includes(t));
+      added.forEach(t => addCat(t));
+      catStatus.textContent = added.length
+        ? `已从 categories.json 合并 ${added.length} 个分类` : 'categories.json 无新增分类';
+    }catch(e){
+      catStatus.textContent = (e.name === 'NotFoundError')
+        ? '该目录未找到 categories.json' : '读取 categories.json 失败';
+    }
+    setTimeout(() => { catStatus.textContent = ''; }, 3000);
+  }
+
+  // —— 保存 categories.json（从已选择的目录）——
+  async function saveCatsToFile(dir){
+    try{
+      const fh = await dir.getFileHandle('categories.json', {create:true});
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify({categories}, null, 2) + '\n');
+      await w.close();
+      catStatus.textContent = `已保存 ${categories.length} 个分类到 categories.json`;
+    }catch(e){
+      catStatus.textContent = '保存失败：' + e.message;
+    }
+    setTimeout(() => { catStatus.textContent = ''; }, 3000);
+  }
+
+  document.getElementById('loadCatsBtn').addEventListener('click', async () => {
+    if(!FS_OK){
+      catStatus.textContent = '当前浏览器不支持直接读取文件夹，请在 Chrome / Edge 中打开。';
+      return;
+    }
+    try{ const dir = await ensureCatsDirHandle(); await loadCatsFromFile(dir); }
+    catch(e){ if(e.name !== 'AbortError') catStatus.textContent = '操作已取消'; }
+  });
+
+  document.getElementById('saveCatsBtn').addEventListener('click', async () => {
+    if(!FS_OK){
+      catStatus.textContent = '当前浏览器不支持直接写入文件夹，请在 Chrome / Edge 中打开。';
+      return;
+    }
+    await autoSaveCats();
+  });
+
   renderCats();
   refresh();
+
+  // —— 启动时：自动加载分类 + 恢复已授权目录句柄（之后添加分类不再弹窗）——
+  (async () => {
+    if(FS_OK){
+      try{
+        const db = await idbOpen();
+        const saved = await idbGet(db, 'meta', 'catsDir');
+        if(saved && await saved.queryPermission({mode:'readwrite'}) === 'granted'){
+          catsDirHandle = saved;
+        }
+      }catch(_){}
+    }
+    try{
+      const res = await fetch('./categories.json', {cache:'no-store'});
+      if(!res.ok) return;
+      const obj = await res.json();
+      const arr = Array.isArray(obj.categories) ? obj.categories
+                : Array.isArray(obj) ? obj : [];
+      if(arr.length){ categories = arr.filter(Boolean); renderCats(); }
+    }catch(_){ /* file:// 下无法 fetch，保持默认 ['日记'] */ }
+  })();
 
   // —— 下载 ——
   document.getElementById('download').addEventListener('click', () => {
