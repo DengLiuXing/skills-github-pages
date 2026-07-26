@@ -76,6 +76,12 @@
   .cat-row input{flex:1;min-width:80px}
   button.sm{padding:8px 14px;font-size:13px;min-width:auto;white-space:nowrap;flex:0 0 auto}
   .cat-status{font-size:12px;color:var(--muted);margin:8px 0 0}
+  .palette-label{font-size:12px;color:var(--muted);margin:12px 0 6px}
+  #catPalette{display:flex;flex-wrap:wrap;gap:8px}
+  .pcat{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:13px;background:#141a24;color:var(--muted);border:1px solid #2d3648;cursor:pointer;transition:.12s}
+  .pcat:hover{color:var(--text);border-color:#3a465c}
+  .pcat.on{background:#1e2532;color:var(--accent2);border-color:#2d3648}
+  .pcat.on::before{content:"✓ ";color:var(--accent2)}
 </style>
 </head>
 <body>
@@ -91,14 +97,12 @@
 
     <label style="margin-top:16px">分类</label>
     <div id="catArea"></div>
+    <div class="palette-label">可选分类（点击添加 · 再次点击移除）</div>
+    <div id="catPalette"></div>
     <div class="cat-row">
       <input id="catInput" type="text" placeholder="输入新分类" autocomplete="off">
       <button id="addCatBtn" class="sm">添加</button>
       <button id="scanCatsBtn" class="sm ghost">从 _posts 读取…</button>
-    </div>
-    <div class="cat-row" style="margin-top:8px">
-      <button id="loadCatsBtn" class="sm ghost">读取分类文件…</button>
-      <button id="saveCatsBtn" class="sm ghost">保存分类到文件…</button>
     </div>
     <div class="cat-status" id="catStatus"></div>
 
@@ -126,8 +130,9 @@
     <p class="hint">
       输入标题和正文后，点击 <b>下载 .md 文件</b> 保存到本地；<br>
       <b>保存到 _posts 文件夹…</b> 可直接写入目录（需 Chrome / Edge）。<br>
-      分类列表来自项目根目录的 <b>categories.json</b>：通过 http 打开时自动加载；
-      点 <b>读取分类文件…</b> 可手动从项目目录加载，<b>保存分类到文件…</b> 可把当前分类写回。
+      分类列表来自项目根目录的 <b>categories.json</b>（由 GitHub Actions 依据 _posts 自动维护），
+      通过 http 打开时自动加载；也可点 <b>从 _posts 读取…</b> 直接从本地文章反查。
+      在面板中<b>点击分类</b>即加入本文（标签前显示 ✓），<b>再次点击</b>移除；只有选中的才写入新文章。
     </p>
   </div>
 
@@ -144,94 +149,48 @@
   }
 
   // —— 分类管理 ——
-  let categories = ['日记'];                // 当前分类数组
-
-  // —— 分类文件自动持久化（首次弹窗选目录，之后缓存句柄静默写回）——
-  const FS_OK = 'showDirectoryPicker' in window && 'indexedDB' in window;
-  let catsDirHandle = null;                 // 缓存的项目目录句柄
-
-  function idbOpen(){
-    return new Promise((res, rej) => {
-      const r = indexedDB.open('new-post-cats', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('meta');
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-  }
-  function idbGet(db, store, key){
-    return new Promise((res, rej) => {
-      const rq = db.transaction(store, 'readonly').objectStore(store).get(key);
-      rq.onsuccess = () => res(rq.result ? rq.result.value : null);
-      rq.onerror = () => rej(rq.error);
-    });
-  }
-  function idbSet(db, store, obj){
-    return new Promise((res, rej) => {
-      const tx = db.transaction(store, 'readwrite');
-      tx.objectStore(store).put(obj, obj.key);
-      tx.oncomplete = () => res();
-      tx.onerror = () => rej(tx.error);
-    });
-  }
-  async function idbSaveHandle(h){
-    const db = await idbOpen();
-    await idbSet(db, 'meta', {key:'catsDir', value:h});
-  }
-
-  // 取得可写的目录句柄：优先用缓存，否则弹窗选择并缓存
-  async function ensureCatsDirHandle(){
-    if(catsDirHandle){
-      let perm = 'prompt';
-      try{ perm = await catsDirHandle.queryPermission({mode:'readwrite'}); }catch(_){}
-      if(perm !== 'granted'){
-        try{ perm = await catsDirHandle.requestPermission({mode:'readwrite'}); }catch(_){}
-      }
-      if(perm === 'granted') return catsDirHandle;
-      catsDirHandle = null;                 // 权限被收回，下次重新选择
-    }
-    const h = await window.showDirectoryPicker({mode:'readwrite'});
-    catsDirHandle = h;
-    idbSaveHandle(h).catch(() => {});
-    return h;
-  }
-
-  // 自动把当前分类写回 categories.json
-  async function autoSaveCats(){
-    if(!FS_OK) return;
-    try{
-      const dir = await ensureCatsDirHandle();
-      const fh = await dir.getFileHandle('categories.json', {create:true});
-      const w = await fh.createWritable();
-      await w.write(JSON.stringify({categories}, null, 2) + '\n');
-      await w.close();
-      catStatus.textContent = `已自动保存 ${categories.length} 个分类到 categories.json`;
-    }catch(e){
-      if(e.name === 'AbortError') return;   // 用户取消目录选择
-      catStatus.textContent = '自动保存失败（已保留在内存）';
-    }
-    setTimeout(() => { catStatus.textContent = ''; }, 2500);
-  }
+  // 分类只用于生成新文章的 front matter；categories.json 由 GitHub Actions
+  // 依据 _posts 自动维护，本页只需在启动时读取，无需写回，也不再弹窗询问存放位置。
+  let allCats = [];                      // 可选分类面板（来自 categories.json / _posts）
+  let selectedCats = [];                // 本文已选分类（进入 front matter）
 
   function renderCats(){
     const area = document.getElementById('catArea');
-    area.innerHTML = categories.map(t =>
+    area.innerHTML = selectedCats.map(t =>
       `<span class="cat">${escHtml(t)}<span class="rm" data-cat="${escHtml(t)}">&times;</span></span>`
     ).join('');
     area.querySelectorAll('.rm').forEach(el => {
-      el.addEventListener('click', () => { removeCat(el.dataset.cat); });
+      el.addEventListener('click', () => { toggleCat(el.dataset.cat); });
     });
+    renderPalette();
     refresh();
   }
-  function addCat(t){
-    t = t.trim(); if(!t || categories.includes(t)) return;
-    categories.push(t); renderCats(); autoSaveCats();
+  function renderPalette(){
+    const pal = document.getElementById('catPalette');
+    pal.innerHTML = allCats.map(t =>
+      `<span class="pcat${selectedCats.includes(t) ? ' on' : ''}" data-cat="${escHtml(t)}">${escHtml(t)}</span>`
+    ).join('');
+    pal.querySelectorAll('.pcat').forEach(el => {
+      el.addEventListener('click', () => { toggleCat(el.dataset.cat); });
+    });
   }
-  function removeCat(t){
-    categories = categories.filter(x => x !== t);
-    renderCats(); autoSaveCats();
+  // 点选切换：在“本文已选”中增删（面板与已选标签共用同一动作）
+  function toggleCat(t){
+    t = t.trim(); if(!t) return;
+    if(selectedCats.includes(t)) selectedCats = selectedCats.filter(x => x !== t);
+    else selectedCats.push(t);
+    renderCats();
   }
+  // 新增自定义分类：同时进入面板与本文已选
+  function addNewCat(t){
+    t = t.trim(); if(!t) return;
+    if(!allCats.includes(t)) allCats.push(t);
+    if(!selectedCats.includes(t)) selectedCats.push(t);
+    renderCats();
+  }
+  function removeCat(t){ toggleCat(t); }
   function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function catsYaml(){ return '[' + categories.map(t => t.includes(' ') ? `"${t}"` : t).join(', ') + ']'; }
+  function catsYaml(){ return '[' + selectedCats.map(t => t.includes(' ') ? `"${t}"` : t).join(', ') + ']'; }
 
   // —— 解析 front matter 中的 categories ——
   function extractCatsFromMd(text){
@@ -286,10 +245,10 @@ categories: ${catsYaml()}
   bodyEl.addEventListener('input', refresh);
 
   document.getElementById('addCatBtn').addEventListener('click', () => {
-    addCat(catInput.value); catInput.value = ''; catInput.focus();
+    addNewCat(catInput.value); catInput.value = ''; catInput.focus();
   });
   catInput.addEventListener('keydown', e => {
-    if(e.key === 'Enter'){ addCat(catInput.value); catInput.value = ''; }
+    if(e.key === 'Enter'){ addNewCat(catInput.value); catInput.value = ''; }
   });
 
   // —— 从 _posts 读取已有分类 ——
@@ -314,82 +273,29 @@ categories: ${catsYaml()}
         } catch(_){}
       }
     }
-    found.forEach(t => { if(!categories.includes(t)) addCat(t); });
-    catStatus.textContent = found.size ? `已从 _posts 读取 ${found.size} 个分类` : '未找到分类';
+    const before = allCats.length;
+    found.forEach(t => { if(!allCats.includes(t)) allCats.push(t); });
+    renderCats();
+    const added = allCats.length - before;
+    catStatus.textContent = found.size
+      ? `已从 _posts 发现 ${found.size} 个分类` + (added ? `（新增 ${added}）` : '')
+      : '未找到分类';
     setTimeout(() => { catStatus.textContent = ''; }, 3000);
-  });
-
-  // —— 读取 categories.json（从已选择的目录）——
-  async function loadCatsFromFile(dir){
-    try{
-      const fh = await dir.getFileHandle('categories.json');
-      const text = await (await fh.getFile()).text();
-      const obj = JSON.parse(text);
-      const arr = Array.isArray(obj.categories) ? obj.categories
-                : Array.isArray(obj) ? obj : [];
-      const added = arr.filter(Boolean).filter(t => !categories.includes(t));
-      added.forEach(t => addCat(t));
-      catStatus.textContent = added.length
-        ? `已从 categories.json 合并 ${added.length} 个分类` : 'categories.json 无新增分类';
-    }catch(e){
-      catStatus.textContent = (e.name === 'NotFoundError')
-        ? '该目录未找到 categories.json' : '读取 categories.json 失败';
-    }
-    setTimeout(() => { catStatus.textContent = ''; }, 3000);
-  }
-
-  // —— 保存 categories.json（从已选择的目录）——
-  async function saveCatsToFile(dir){
-    try{
-      const fh = await dir.getFileHandle('categories.json', {create:true});
-      const w = await fh.createWritable();
-      await w.write(JSON.stringify({categories}, null, 2) + '\n');
-      await w.close();
-      catStatus.textContent = `已保存 ${categories.length} 个分类到 categories.json`;
-    }catch(e){
-      catStatus.textContent = '保存失败：' + e.message;
-    }
-    setTimeout(() => { catStatus.textContent = ''; }, 3000);
-  }
-
-  document.getElementById('loadCatsBtn').addEventListener('click', async () => {
-    if(!FS_OK){
-      catStatus.textContent = '当前浏览器不支持直接读取文件夹，请在 Chrome / Edge 中打开。';
-      return;
-    }
-    try{ const dir = await ensureCatsDirHandle(); await loadCatsFromFile(dir); }
-    catch(e){ if(e.name !== 'AbortError') catStatus.textContent = '操作已取消'; }
-  });
-
-  document.getElementById('saveCatsBtn').addEventListener('click', async () => {
-    if(!FS_OK){
-      catStatus.textContent = '当前浏览器不支持直接写入文件夹，请在 Chrome / Edge 中打开。';
-      return;
-    }
-    await autoSaveCats();
   });
 
   renderCats();
   refresh();
 
-  // —— 启动时：自动加载分类 + 恢复已授权目录句柄（之后添加分类不再弹窗）——
+  // —— 启动时尝试从同级 categories.json 自动加载（由 GitHub Actions 维护；
+  //     categories.json 是只读输入，本页不再写回，file:// 打开时静默回退默认 ['日记']）——
   (async () => {
-    if(FS_OK){
-      try{
-        const db = await idbOpen();
-        const saved = await idbGet(db, 'meta', 'catsDir');
-        if(saved && await saved.queryPermission({mode:'readwrite'}) === 'granted'){
-          catsDirHandle = saved;
-        }
-      }catch(_){}
-    }
     try{
       const res = await fetch('./categories.json', {cache:'no-store'});
       if(!res.ok) return;
       const obj = await res.json();
       const arr = Array.isArray(obj.categories) ? obj.categories
                 : Array.isArray(obj) ? obj : [];
-      if(arr.length){ categories = arr.filter(Boolean); renderCats(); }
+      if(arr.length){ allCats = arr.filter(Boolean); renderCats(); }
     }catch(_){ /* file:// 下无法 fetch，保持默认 ['日记'] */ }
   })();
 

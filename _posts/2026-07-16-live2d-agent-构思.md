@@ -1,5 +1,5 @@
 ---
-title: "live2d + agent 构思"
+title: "live2d-agent-构思"
 date: 2026-07-16
 categories: [开发笔记]
 ---
