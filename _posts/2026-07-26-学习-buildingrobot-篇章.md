@@ -1,7 +1,7 @@
 ---
 title: "学习 building_robot 篇章"
 date: 2026-07-26
-categories: [学习笔记, 日记]
+categories: [日记]
 ---
 
 今天基于 SDF 在 gazebo 中生成了一个小车，我了解到了 gazebo 的基础构成。
