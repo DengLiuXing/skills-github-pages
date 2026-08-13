@@ -1,8 +1,10 @@
 ---
-title: "Vue 框架学习中"
+title: "Vue框架+Python后端结合开发技能学习中"
 date: 2006-11-23
 categories: [学习笔记]
 ---
+
+# Vue 框架
 
 ## 一、Vue 的配置文件（控制项目怎么跑、怎么构建）
 
@@ -30,3 +32,10 @@ categories: [学习笔记]
 - **想加一个独立功能块** → 在 `src/components/` 新建 `.vue` 组件，再在 `App.vue` 里引用
 - **想改浏览器标签标题/图标** → 改 `index.html`（标题在第 7 行，图标在第 5 行）
 - **配置文件**（`vite.config.js` / `package.json` / `main.js`）→ 平时别动，除非要配开发服务器、装依赖、加插件
+
+
+---
+---
+
+
+# Python 后端
